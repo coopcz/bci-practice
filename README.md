@@ -10,43 +10,51 @@ Takes raw EEG recordings, cleans the signal, and trains classifiers to identify 
 
 ## Results
 
-| Subject | CSP + LDA | EEGNet | Improvement |
-|---------|-----------|--------|-------------|
-| S01 | 63.9% | 76.0% | +12.1% |
-| S02 | 59.0% | 71.5% | +12.5% |
-| S03 | 71.5% | 78.5% | +7.0% |
-| S04 | 39.6% | 62.8% | +23.2% |
-| S05 | 39.3% | 88.9% | +49.6% |
-| S06 | 42.7% | 56.9% | +14.2% |
-| S07 | 62.5% | 84.0% | +21.5% |
-| S08 | 63.5% | 85.4% | +21.9% |
-| S09 | 58.6% | 79.5% | +20.9% |
-| **Mean** | **55.6%** | **76.1%** | **+20.5%** |
+All results use proper cross-session evaluation — trained on session T, tested on a completely separate session E recorded on a different day. No cross-validation leakage. EOG artifact channels removed before training.
 
-EEGNet outperformed the classical baseline on every single subject. The biggest jump was S05 — CSP+LDA barely beat chance at 39.3%, EEGNet hit 88.9%.
+| Subject | CSP+LDA | Riemannian | EEGNet |
+|---------|---------|------------|--------|
+| S01 | 46.2% | 56.6% | 43.1% |
+| S02 | 35.8% | 38.2% | 24.3% |
+| S03 | 40.6% | 53.1% | 45.1% |
+| S04 | 23.3% | 42.0% | 26.7% |
+| S05 | 28.5% | 38.9% | 26.4% |
+| S06 | 31.6% | 40.3% | 21.5% |
+| S07 | 30.2% | 34.4% | 24.7% |
+| S08 | 41.3% | 53.8% | 30.2% |
+| S09 | 46.5% | 64.6% | 22.6% |
+| **Mean** | **36.0%** | **46.9%** | **29.4%** |
 
-![Results](csp_vs_eegnet_results.png)
+![Benchmark Results](benchmark_results.png)
+
+Riemannian geometry outperforms both CSP+LDA and EEGNet on every subject under proper cross-session evaluation. EEGNet underperforms classical methods here — 288 training trials isn't enough for a neural network to learn session-invariant features. This is a known and unsolved problem in BCI research called session non-stationarity.
+
+The gap between within-session cross-validation (where EEGNet hits 76%) and cross-session evaluation (where it drops to 29%) illustrates exactly why evaluation protocol matters. Most published numbers use within-session cross-validation. These results use the harder and more realistic cross-session protocol.
 
 ## Pipeline
 
-Raw EEG → bandpass filter (0.5–40Hz) → epoch into 4s trials → extract features → classify
+Raw EEG → remove EOG channels → bandpass filter (0.5–40Hz) → epoch into 4s trials → classify
 
-**CSP + LDA** — classical approach. Common Spatial Patterns finds the best electrode combinations to separate classes, Linear Discriminant Analysis draws the decision boundaries. Fast, interpretable, been the standard BCI baseline for 20 years.
+**CSP + LDA** — Common Spatial Patterns finds the optimal linear combinations of electrodes to separate classes. Linear Discriminant Analysis draws decision boundaries in that space. Fast, interpretable, been the standard BCI baseline for 20 years.
 
-**EEGNet** — compact convolutional neural network designed specifically for EEG (Lawhern et al. 2018). Only 3,444 parameters. Learns both spatial and temporal patterns directly from the raw signal.
+**Riemannian Geometry (TS + LR)** — computes a covariance matrix per trial, projects it to tangent space using Riemannian geometry, classifies with logistic regression. Naturally handles the curved geometry of covariance matrices and is more robust to session-to-session signal drift than CSP-based methods.
 
-Both evaluated with 5-fold cross-validation on BCI Competition IV Dataset 2a.
+**EEGNet** — compact convolutional neural network designed specifically for EEG (Lawhern et al. 2018). 3,444 parameters. Learns spatial and temporal patterns directly from the raw signal. Outperforms classical methods within-session but struggles to generalize cross-session with limited data.
 
 ## Dataset
 
-BCI Competition IV Dataset 2a. 9 subjects, 22 EEG channels, 288 trials per subject, 4-class motor imagery. The standard benchmark dataset in BCI research.
+BCI Competition IV Dataset 2a. 9 subjects, 22 EEG channels, 250Hz, 288 trials per session, 4-class motor imagery (left hand, right hand, feet, tongue). Two sessions per subject — one for training, one for evaluation. The standard benchmark dataset in BCI research.
 
 ## Stack
 
-- MNE — EEG processing
+- MNE — EEG processing and epoching
+- pyRiemann — Riemannian geometry classifier
 - PyTorch — EEGNet
 - scikit-learn — CSP, LDA, cross-validation
 
 ## What's Next
 
-- Probably maybe some variant of CSP
+- FBCSP — filter bank CSP across 9 frequency bands to capture subject-specific frequency information
+- ATCNet — EEGNet with multi-head attention and temporal convolutions, reported at 81.98% on this dataset
+- Euclidean alignment — preprocessing step that should push Riemannian accuracy significantly higher by aligning session covariances before classification
+- Per-subject frequency tuning — different subjects have peak motor imagery signal at different frequency bands
